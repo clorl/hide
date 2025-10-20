@@ -1639,6 +1639,16 @@ class Editor extends Component {
 		}
 	}
 
+	final CELL_SIZE = {
+		w: 100,
+		h: 20
+	};
+
+	public var cellCount = {
+		cols: 5,
+		rows: 8
+	};
+
 	public function refresh( ?state : UndoState ) {
 		if( state == null )
 			state = getState();
@@ -1650,9 +1660,16 @@ class Editor extends Component {
 		element.empty();
 		element.addClass('cdb');
 
+		///
+		 
+		var sheetComponent = new Sheet(element);
+
+		///
+
 		formulas = new Formulas(this);
 		formulas.enable = ide.ideConfig.enableDBFormulas;
 		formulas.evaluateAll(currentSheet.realSheet);
+
 
 		var content = new Element("<table>");
 		tables = [];

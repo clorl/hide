@@ -802,3 +802,147 @@ body.fullScreenMode {
 		height: 100% !important;
 	}
 }
+
+@resize-margin: 6px;
+@resize-handle-size: 0px;
+@resize-handle-color: #686868;
+@select-color: #0b57d0;
+
+.sheet {
+	// Generic classes
+	.hgroup, .vgroup {
+		display: flex;
+		flex-wrap: nowrap;
+	}
+	.vgroup {
+		flex-direction: column;
+	}
+	.center, .vcenter, .hcenter {
+		display: flex;
+	}
+	.center {
+		justify-content: center;
+		align-items: center;
+	}
+	.vcenter {
+		align-items: center;
+	}
+	.hcenter {
+		justify-content: center;
+	}
+	.fill {
+		flex-grow: 1;
+		height: 100%;
+	}
+	.hfill {
+		flex-grow: 1;
+	}
+	.vfill {
+		height: 100%;
+	}
+	.vresize-handle {
+		user-select: none !important;
+		cursor: ns-resize;
+		width: 100%;
+		position: relative;
+		height: @resize-margin;
+		margin-top: (-@resize-margin / 2);
+		margin-bottom: (-@resize-margin / 2);
+		&:hover::after {
+			content: '';
+			background: @resize-handle-color;
+			right: 0;
+			left: 0;
+			bottom: (-@resize-handle-size / 2);
+			top: (-@resize-handle-size / 2);
+			z-index: 2;
+			position: absolute;
+		}
+	}
+	.hresize-handle {
+		user-select: none !important;
+		cursor: ew-resize;
+		height: 100%;
+		position: relative;
+		width: 4px;
+		margin-right: (-@resize-margin / 4);
+		margin-left: (-@resize-margin / 4);
+		&:hover::after {
+			content: '';
+			top: 0;
+			bottom: 0;
+			left: (-@resize-handle-size / 2);
+			right: (-@resize-handle-size / 2);
+			background: @resize-handle-color;
+			z-index: 2;
+			position: absolute;
+		}
+	}
+	.vresize-hint, .hresize-hint {
+		position: absolute;
+		background: @resize-handle-color;
+		z-index: 3;
+	}
+	.vresize-hint {
+		height: 4px;
+		width: 100%;
+		transform: translateY((-@resize-handle-size / 2));
+	}
+	.hresize-hint {
+		width: 4px;
+		height: 100%;
+		transform: translateX((-@resize-handle-size / 2));
+	}
+
+	.grid-a {
+			grid-area: a;
+	}
+
+	.grid-b {
+			grid-area: b;
+	}
+
+	.grid-c {
+			grid-area: c;
+	}
+
+	.hidden {
+		display: none;
+	}
+
+	.sticky {
+		position: sticky;
+		top: 0;
+	}
+
+	// Sheet layout
+	display: grid;
+	//position: relative;
+	grid-template-columns: 40px 1fr;
+	grid-template-rows: 20px 1fr;
+	grid-template-areas:
+    "a b"
+    "a c";
+	.cell-header {
+		background-color: #2A2A2A;
+		box-sizing: border-box;
+		border-right: 1px solid #666666;
+		border-bottom: 1px solid #666666;
+		flex-shrink: 0;
+		cursor: pointer;
+	}
+	.row-header {
+		&:first-child>span {
+			display: none;
+		}
+	}
+	.col-header.selected .row-header.selected {
+		background: @select-color;
+	}
+	.canvas-wrapper {
+		background: green;
+	}
+	canvas {
+		border: 1px solid #686868;
+	}
+}

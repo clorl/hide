@@ -201,6 +201,7 @@ class Table extends Component {
 
 
 	function refreshTable() {
+
 		errorCount = 0;
 		errors = new Map<Line, Bool>();
 		warningCount = 0;

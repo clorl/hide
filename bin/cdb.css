@@ -713,3 +713,132 @@ body.fullScreenMode .lm_content.fullScreen {
   width: 100% !important;
   height: 100% !important;
 }
+.sheet {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  grid-template-rows: 20px 1fr;
+  grid-template-areas: "a b" "a c";
+}
+.sheet .hgroup,
+.sheet .vgroup {
+  display: flex;
+  flex-wrap: nowrap;
+}
+.sheet .vgroup {
+  flex-direction: column;
+}
+.sheet .center,
+.sheet .vcenter,
+.sheet .hcenter {
+  display: flex;
+}
+.sheet .center {
+  justify-content: center;
+  align-items: center;
+}
+.sheet .vcenter {
+  align-items: center;
+}
+.sheet .hcenter {
+  justify-content: center;
+}
+.sheet .fill {
+  flex-grow: 1;
+  height: 100%;
+}
+.sheet .hfill {
+  flex-grow: 1;
+}
+.sheet .vfill {
+  height: 100%;
+}
+.sheet .vresize-handle {
+  user-select: none !important;
+  cursor: ns-resize;
+  width: 100%;
+  position: relative;
+  height: 6px;
+  margin-top: -3px;
+  margin-bottom: -3px;
+}
+.sheet .vresize-handle:hover::after {
+  content: '';
+  background: #686868;
+  right: 0;
+  left: 0;
+  bottom: 0px;
+  top: 0px;
+  z-index: 2;
+  position: absolute;
+}
+.sheet .hresize-handle {
+  user-select: none !important;
+  cursor: ew-resize;
+  height: 100%;
+  position: relative;
+  width: 4px;
+  margin-right: -1.5px;
+  margin-left: -1.5px;
+}
+.sheet .hresize-handle:hover::after {
+  content: '';
+  top: 0;
+  bottom: 0;
+  left: 0px;
+  right: 0px;
+  background: #686868;
+  z-index: 2;
+  position: absolute;
+}
+.sheet .vresize-hint,
+.sheet .hresize-hint {
+  position: absolute;
+  background: #686868;
+  z-index: 3;
+}
+.sheet .vresize-hint {
+  height: 4px;
+  width: 100%;
+  transform: translateY(0px);
+}
+.sheet .hresize-hint {
+  width: 4px;
+  height: 100%;
+  transform: translateX(0px);
+}
+.sheet .grid-a {
+  grid-area: a;
+}
+.sheet .grid-b {
+  grid-area: b;
+}
+.sheet .grid-c {
+  grid-area: c;
+}
+.sheet .hidden {
+  display: none;
+}
+.sheet .sticky {
+  position: sticky;
+  top: 0;
+}
+.sheet .cell-header {
+  background-color: #2A2A2A;
+  box-sizing: border-box;
+  border-right: 1px solid #666666;
+  border-bottom: 1px solid #666666;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.sheet .row-header:first-child > span {
+  display: none;
+}
+.sheet .col-header.selected .row-header.selected {
+  background: #0b57d0;
+}
+.sheet .canvas-wrapper {
+  background: green;
+}
+.sheet canvas {
+  border: 1px solid #686868;
+}
