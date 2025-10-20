@@ -205,12 +205,12 @@ class Sheet extends Component {
 						var newHeight = e.clientY - draggedElt.previousElementSibling.getBoundingClientRect().y;
 						newHeight = newHeight < 10 ? 10 : newHeight; //TODO Magic number
 						draggedElt.previousElementSibling.style.height = '${newHeight}px';
-						rowSizes.set(index, Math.floor(newHeight));
+						//rowSizes.set(index, Math.floor(newHeight));
 				case "hresize":
 						var newWidth = e.clientX - draggedElt.previousElementSibling.getBoundingClientRect().x;
 						newWidth = newWidth < 10 ? 10 : newWidth; //TODO Magic number
 						draggedElt.previousElementSibling.style.width = '${newWidth}px';
-						colSizes.set(index, Math.floor(newWidth));
+						//colSizes.set(index, Math.floor(newWidth));
 				default: trace('No dragEvent defined on ${e.target}');
 			}
 
@@ -234,6 +234,9 @@ class Sheet extends Component {
 		return columnName;
 	}
 
+	function getCellSize(x: Int, y: Int) {
+		
+	}
 
 	// Components
 }
