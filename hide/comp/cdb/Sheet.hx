@@ -24,13 +24,22 @@ class SheetHeader extends NativeComponent {
 	var headerCells = new Array<HTMLElement>();
 	var resizeHint: HTMLElement;
 	var isVertical: Bool;
+	var cellSize: Int;
+	var cellCount: Int;
 
 	// State
 	var resizedElement: HTMLElement;
+	var cellSizes = new Map<Int, Int>();
+
+	// Callbacks
+	public var onDrag = function(e) {}
+	public var onResize = function(newSize) {}
 
 	public function new(size: Vector2i, count: Int, isVertical: Bool, ?parent, ?elt) {
 		super(parent, null);
 		this.isVertical = isVertical;
+		this.cellSize = isVertical ? size.y : size.x;
+		this.cellCount = count;
 		element.classList.add(isVertical ? "vgroup" : "hgroup");
 		for (i in 0...count) {
 			var elt = el('
@@ -40,8 +49,7 @@ class SheetHeader extends NativeComponent {
 			elt.style.height = '${size.y}px';
 			elt.style.width = '${size.x}px';
 
-			var sep = el('<div class="${isVertical ? "vresize-handle" : "hresize-handle"}" draggable="true" 
-					data-index="$i"></div>', element);
+			var sep = el('<div class="${isVertical ? "vresize-handle" : "hresize-handle"}" draggable="true"></div>', element);
 			//rowHeadersSeparators.push(sep);
 			if (!isVertical || (isVertical && i > 0)) {
 				sep.addEventListener("drag", onDragInternal);
@@ -81,24 +89,32 @@ class SheetHeader extends NativeComponent {
 			return;
 		}
 
+		var newSize: Int = -1;
+
 		if (isVertical) {
-			var newHeight = e.clientY - resizedElement.getBoundingClientRect().y;
-			newHeight = newHeight < MIN_SIZE ? MIN_SIZE : newHeight;
-			resizedElement.style.height = '${newHeight}px';
+			newSize = Math.floor(e.clientY - resizedElement.getBoundingClientRect().y);
+			newSize = newSize < MIN_SIZE ? MIN_SIZE : newSize;
+			resizedElement.style.height = '${newSize}px';
 		} else {
-			var newWidth = e.clientX - resizedElement.getBoundingClientRect().x;
-			newWidth = newWidth < MIN_SIZE ? MIN_SIZE : newWidth;
-			resizedElement.style.width = '${newWidth}px';
+			newSize = Math.floor(e.clientX - resizedElement.getBoundingClientRect().x);
+			newSize = newSize < MIN_SIZE ? MIN_SIZE : newSize;
+			resizedElement.style.width = '${newSize}px';
 		}
+
+		// Store in internal state
+		var indexStr = resizedElement.dataset.index;
+		var index = Std.parseInt(indexStr);
+		if (index != null && newSize >= 0) {
+			cellSizes.set(index, newSize);
+		}
+
 		if (!resizeHint.classList.contains("hidden")) {
 			resizeHint.classList.add("hidden");
 		}
 		resizedElement = null;
-		// TODO Store internal state
+		onResize(getTotalSize());
 	}
 
-	public var onDrag = function(e) {
-	}
 
 	function getColName(index: Int): String {
 		var tempIndex = index; 
@@ -114,10 +130,25 @@ class SheetHeader extends NativeComponent {
 
 		return columnName;
 	}
+
+	function getTotalSize(): Int {
+		var modifiedCount = 0;
+		var sum = 0;
+		for (k => v in cellSizes.keyValueIterator()) {
+			sum += v;
+			modifiedCount += 1;
+		}
+
+
+		if (isVertical) {
+			return cellSize * (cellCount - 1 - modifiedCount) + sum;
+		} else {
+			return cellSize * (cellCount - modifiedCount) + sum;
+		}
+	}
 }
 
-// Sheet is a Component, not a NativeComponent so it can hook to the rest of the code, but every component inside of it should be
-// NativeComponent
+// Sheet is a Component, not a NativeComponent so it can hook to the rest of the code, but every component inside of it should be a NativeComponent
 class Sheet extends Component {
 
 	final CELL_SIZE = {
@@ -131,8 +162,8 @@ class Sheet extends Component {
 	final RESIZE_MARGIN = 6;
 
 	public var cellCount = {
-		cols: 20,
-		rows: 50
+		cols: 5,
+		rows: 10
 	};
 
 	// State
@@ -145,9 +176,6 @@ class Sheet extends Component {
 	// UI
 	var root: HTMLElement;
 	var canvas : js.html.CanvasElement;
-
-	var cellResizeHintH: HTMLElement;
-	var cellResizeHintV: HTMLElement;
 
 	var colHeadersGroup : SheetHeader;
 	var rowHeadersGroup : SheetHeader;
@@ -167,9 +195,6 @@ class Sheet extends Component {
 	}
 
 	public function build() {
-		// General setup
-		document.body.addEventListener("drop", onDropAnywhere);
-
 		// Row Headers
 		var size: Vector2i = {
 			x: CELL_SIZE.wsmall,
@@ -177,60 +202,34 @@ class Sheet extends Component {
 		}
 		rowHeadersGroup = new SheetHeader(size, cellCount.rows, true, root);
 		rowHeadersGroup.element.classList.add("grid-a");
+		rowHeadersGroup.onResize = function(newSize) {
+			canvas.height = newSize;
+			refresh();
+		}
 		//rowHeadersGroup.onDrag = onDragAnywhere;
 
 		// Col headers
 		size.x = CELL_SIZE.w;
 		colHeadersGroup = new SheetHeader(size, cellCount.cols, false, root);
 		colHeadersGroup .element.classList.add("grid-b");
+		colHeadersGroup.onResize = function(newSize) {
+			canvas.width = newSize;
+			refresh();
+		}
 		//colHeadersGroup.onDrag = onDragAnywhere;
 
 		// Grid canvas
 		canvas = Browser.document.createCanvasElement();
 		canvas.classList.add("grid-c");
 		root.append(canvas);
-		
-		cellResizeHintH = el('<div class="hresize-hint"></div>', root);
-		cellResizeHintH.style.top = "0";
-		cellResizeHintH.style.left = "0";
-		cellResizeHintV = el('<div class="vresize-hint"></div>', root);
-		cellResizeHintV.style.top = "0";
-		cellResizeHintV.style.left = "0";
-
 	}
 
 	/**
 	 * Applies the state to the visual UI in a retained manner. Should be called everytime any state-related property is modified.
 	 */
 	public function refresh() {
-		// Update drag hint
-		if (draggedElt == null) {
-			cellResizeHintH.classList.add("hidden");
-			cellResizeHintV.classList.add("hidden");
-		} else {
-			var dragEvent = draggedElt.dataset.dragEvent;
-			if (dragEvent != null) {
-				switch dragEvent {
-					case "hresize":
-						cellResizeHintH.classList.remove("hidden");
-						cellResizeHintV.classList.add("hidden");
-					case "vresize":
-						cellResizeHintH.classList.add("hidden");
-						cellResizeHintV.classList.remove("hidden");
-					default:
-				}
-			}
-		}
-
 		if (canvas == null) {
 			return;
-		}
-
-		var newSize = getCanvasSize();
-		if (newSize.x != curCanvasSize.x && newSize.y != curCanvasSize.y) {
-			curCanvasSize = newSize;
-			canvas.height = newSize.y;
-			canvas.width = newSize.x;
 		}
 
 		var ctx = canvas.getContext("2d");
@@ -239,81 +238,7 @@ class Sheet extends Component {
 		}
 	}
 
-	function onDragAnywhere(e) {
-		return;
-		if (draggedElt == null) {
-			draggedElt = e.target;
-		}
-
-		var dragEvent = draggedElt.dataset.dragEvent;
-		if (dragEvent == null) {
-			return;
-		}
-
-		// Element here should be the parent from which the resize hints are absolute positioned
-		var bounds = root.getBoundingClientRect();
-
-		switch dragEvent {
-			case "vresize":
-				var top = e.clientY - bounds.top;
-				cellResizeHintV.style.top = '${top}px';
-			case "hresize":
-				var left = e.clientX - bounds.left;
-				cellResizeHintH.style.left = '${left}px';
-			default: trace('No dragEvent defined on ${e.target}');
-		}
-		refresh();
-	}
-
-	// Event handlers (they should all call refresh at some point)
-	function onDropAnywhere(e) {
-			if (draggedElt == null) {
-				return;
-			}
-
-			var dragEvent = draggedElt.dataset.dragEvent;
-			var indexStr = draggedElt.dataset.index;
-			var index = Std.parseInt(indexStr);
-			if (dragEvent == null || index == null) {
-				return;
-			}
-
-			switch dragEvent {
-				case "vresize":
-						var newHeight = e.clientY - draggedElt.previousElementSibling.getBoundingClientRect().y;
-						newHeight = newHeight < 10 ? 10 : newHeight; //TODO Magic number
-						draggedElt.previousElementSibling.style.height = '${newHeight}px';
-						//rowSizes.set(index, Math.floor(newHeight));
-				case "hresize":
-						var newWidth = e.clientX - draggedElt.previousElementSibling.getBoundingClientRect().x;
-						newWidth = newWidth < 10 ? 10 : newWidth; //TODO Magic number
-						draggedElt.previousElementSibling.style.width = '${newWidth}px';
-						//colSizes.set(index, Math.floor(newWidth));
-				default: trace('No dragEvent defined on ${e.target}');
-			}
-
-			draggedElt = null;
-			refresh();
-	}
-
 	// Helpers
-	
-	function getCanvasSize(): Vector2i {
-		var baseHeight = CELL_SIZE.h * (cellCount.rows - 1);
-		var baseWidth = CELL_SIZE.w * cellCount.cols + Math.floor(CELL_SIZE.wsmall / 2);
-		for (k in rowSizes.keys()) {
-			baseHeight += rowSizes.get(k);
-		}
-
-		for (k in colSizes.keys()) {
-			baseWidth += colSizes.get(k);
-		}
-
-		return {
-			x: baseWidth,
-			y: baseHeight
-		}
-	}
 
 	function getCellSize(x: Int, y: Int) {
 		
