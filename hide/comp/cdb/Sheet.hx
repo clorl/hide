@@ -67,6 +67,10 @@ class SheetHeader extends NativeComponent {
 		}
 	}
 
+	public function refresh() {
+		onResize(getTotalSize());
+	}
+
 	function onDragInternal(e) {
 		onDrag(e);
 
@@ -112,7 +116,7 @@ class SheetHeader extends NativeComponent {
 			resizeHint.classList.add("hidden");
 		}
 		resizedElement = null;
-		onResize(getTotalSize());
+		refresh();
 	}
 
 
@@ -162,16 +166,12 @@ class Sheet extends Component {
 	final RESIZE_MARGIN = 6;
 
 	public var cellCount = {
-		cols: 5,
-		rows: 10
+		cols: 20,
+		rows: 50
 	};
 
 	// State
-	var draggedElt: Null<HTMLElement>;
 	var cellData: Map2D<Int,CellData>;
-	// These fields will be stored and used upon reloading the app to avoid costly DOM queries
-	var rowSizes = new Map<Int, Int>();
-	var colSizes = new Map<Int, Int>();
 
 	// UI
 	var root: HTMLElement;
@@ -179,12 +179,6 @@ class Sheet extends Component {
 
 	var colHeadersGroup : SheetHeader;
 	var rowHeadersGroup : SheetHeader;
-
-	// Misc
-	var curCanvasSize: Vector2<Int> = {
-		x: 0,
-		y: 0
-	};
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -222,6 +216,8 @@ class Sheet extends Component {
 		canvas = Browser.document.createCanvasElement();
 		canvas.classList.add("grid-c");
 		root.append(canvas);
+		rowHeadersGroup.refresh();
+		colHeadersGroup.refresh();
 	}
 
 	/**
