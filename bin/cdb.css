@@ -715,9 +715,10 @@ body.fullScreenMode .lm_content.fullScreen {
 }
 .sheet {
   display: grid;
+  position: relative;
   grid-template-columns: 40px 1fr;
   grid-template-rows: 20px 1fr;
-  grid-template-areas: "a b" "a c";
+  grid-template-areas: "d b" "a c";
 }
 .sheet .hgroup,
 .sheet .vgroup {
@@ -815,6 +816,9 @@ body.fullScreenMode .lm_content.fullScreen {
 .sheet .grid-c {
   grid-area: c;
 }
+.sheet .grid-d {
+  grid-area: d;
+}
 .sheet .hidden {
   display: none;
 }
@@ -830,12 +834,30 @@ body.fullScreenMode .lm_content.fullScreen {
   flex-shrink: 0;
   cursor: pointer;
 }
-.sheet .row-header:first-child > span {
-  display: none;
-}
 .sheet .col-header.selected .row-header.selected {
   background: #0b57d0;
 }
 .sheet .canvas-wrapper {
   background: green;
+}
+.sheet .active-cell {
+  z-index: 2;
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 2px solid #0b57d0;
+}
+.sheet .active-cell .handle {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  width: 8px;
+  height: 8px;
+  background-color: #0b57d0;
+  border: 2px solid white;
+  border-radius: 1000px;
+  cursor: crosshair;
+}
+.sheet .active-cell.with-bg {
+  background-color: rgba(26, 115, 232, 0.1);
 }

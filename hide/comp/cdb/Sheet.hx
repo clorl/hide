@@ -18,6 +18,23 @@ typedef CellData = {
 	var height: Int;
 }
 
+class Rect2i {
+	public var pos: Vector2<Int>;
+	public var size: Vector2<Int>;
+	public var end(get,null): Vector2<Int>;
+	function get_end() {
+		return {
+			x: pos.x + size.x,
+			y: pos.y + size.y
+		};
+	}
+
+	public function new(x: Int, y: Int, sizeX: Int, sizeY: Int) {
+		this.pos = {x: x, y: y};
+		this.size = {x: sizeX, y: sizeY };
+	}
+}
+
 class SheetHeader extends NativeComponent {
 	static final MIN_SIZE = 10;
 
@@ -44,16 +61,13 @@ class SheetHeader extends NativeComponent {
 		for (i in 0...count) {
 			var elt = el('
 					<div class="cell-header ${isVertical ? "row-header" : "col-header"} center" data-index="$i">
-						<span>${isVertical ? Std.string(i) : getColName(i)}</span>
+						<span>${isVertical ? Std.string(i + 1) : getColName(i)}</span>
 					</div>', element);
 			elt.style.height = '${size.y}px';
 			elt.style.width = '${size.x}px';
 
 			var sep = el('<div class="${isVertical ? "vresize-handle" : "hresize-handle"}" draggable="true"></div>', element);
-			//rowHeadersSeparators.push(sep);
-			if (!isVertical || (isVertical && i > 0)) {
-				sep.addEventListener("drag", onDragInternal);
-			}
+			sep.addEventListener("drag", onDragInternal);
 
 			headerCells.push(elt);
 		}
@@ -142,12 +156,7 @@ class SheetHeader extends NativeComponent {
 			modifiedCount += 1;
 		}
 
-
-		if (isVertical) {
-			return cellSize * (count - 1 - modifiedCount) + sum;
-		} else {
-			return cellSize * (count - modifiedCount) + sum;
-		}
+		return cellSize * (count -  modifiedCount) + sum;
 	}
 
 	public function getSize(index: Int): Int {
@@ -157,6 +166,46 @@ class SheetHeader extends NativeComponent {
 		} else {
 			return found;
 		}
+	}
+}
+
+class SelectionIndicator extends NativeComponent {
+	var handle: HTMLElement;
+
+	public var onHandleDrag = function(e) {}
+	public var offset: Vector2i;
+
+	public function new(?parent, ?elt) {
+		super(parent, null);
+		element.classList.add("active-cell");
+		element.classList.add("hidden");
+
+		handle = el('<div class="handle"></div>', element);
+		handle.addEventListener("drag", onDragInternal);
+	}
+
+	public function setSelection(rect: Rect2i, ?isMulti: Bool) {
+		if (element.classList.contains("hidden")) {
+			element.classList.remove("hidden");
+		}
+		element.style.top = '${rect.pos.y + offset.y}px';
+		element.style.left = '${rect.pos.x + offset.x}px';
+		element.style.width = '${rect.size.x}px';
+		element.style.height = '${rect.size.y}px';
+
+		setMultiSelection(isMulti == null ? false : isMulti);
+	}
+
+	public function setMultiSelection(multi: Bool) {
+		if (multi) {
+			element.classList.add("with-bg");
+		} else {
+			element.classList.remove("with-bg");
+		}
+	}
+
+	function onDragInternal(e) {
+		onHandleDrag(e);
 	}
 }
 
@@ -178,15 +227,16 @@ class Sheet extends Component {
 		rows: 50
 	};
 
-	// State
-	var cellData: Map2D<Int,CellData>;
-
 	// UI
 	var root: HTMLElement;
 	var canvas : js.html.CanvasElement;
 
 	var cols : SheetHeader;
 	var rows : SheetHeader;
+	var selIndicator: SelectionIndicator;
+
+	// State
+	var selection = new Array<Rect2i>();
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -197,6 +247,11 @@ class Sheet extends Component {
 	}
 
 	public function build() {
+		// Origin
+		var origin = el('<div class="cell-header row-header grid-d"></div>', root);
+		origin.style.width = '${CELL_SIZE.wsmall}px';
+		origin.style.height = '${CELL_SIZE.h}px';
+		
 		// Row Headers
 		var size: Vector2i = {
 			x: CELL_SIZE.wsmall,
@@ -216,12 +271,29 @@ class Sheet extends Component {
 		cols.onResize = function(newSize) {
 			refresh();
 		}
-		//cols.onDrag = onDragAnywhere;
+		
+		// Selection indicator
+		selIndicator = new SelectionIndicator(root);
+		selIndicator.offset = {
+			x: CELL_SIZE.wsmall - 1,
+			y: CELL_SIZE.h - 1
+		};
 
 		// Grid canvas
 		canvas = Browser.document.createCanvasElement();
 		canvas.classList.add("grid-c");
 		root.append(canvas);
+
+		canvas.addEventListener("click", function(e) {
+			var bounds = canvas.getBoundingClientRect();
+			var mouseX = Math.floor(e.clientX - bounds.left);
+			var mouseY = Math.floor(e.clientY - bounds.top);
+			var cell = getCellAtScreenPos(mouseX, mouseY);
+			selection = new Array<Rect2i>();
+			selection.push(new Rect2i(cell.x, cell.y, 0, 0));
+			refresh();
+		});
+
 		refresh();
 	}
 
@@ -235,6 +307,14 @@ class Sheet extends Component {
 
 		canvas.height = rows.getTotalSize();
 		canvas.width = cols.getTotalSize();
+
+		// Selection
+		if (selection.length > 0) {
+			var cell = {x: selection[0].pos.x, y: selection[0].pos.y };
+			selIndicator.setSelection(getCellBounds(cell.x, cell.y), true);
+		} else {
+			selIndicator.element.classList.add("hidden");
+		}
 
 		var ctx = canvas.getContext("2d");
 		if (ctx == null) {
@@ -255,7 +335,7 @@ class Sheet extends Component {
 		}
 
 		var curY = 0;
-		for (y in 1...rows.count) {
+		for (y in 0...rows.count) {
 			curY += getRowSize(y);
 			ctx.beginPath();
 			ctx.moveTo(0, curY);
@@ -278,6 +358,66 @@ class Sheet extends Component {
 		var width = cols.getSize(x);
 		var height = rows.getSize(y);
 		return {x: width, y: height};
+	}
+
+	/**
+	 * @returns Coordinates of the cell in the sheet
+	 */
+	function getCellAtScreenPos(x: Int, y: Int): Vector2i {
+		var col = -1;
+		var curX = 0;
+		while (curX < canvas.width && col < cols.count) {
+			col += 1;
+			if (x < curX) {
+				col -= 1;
+				break;
+			}
+			curX += getColSize(col);
+		}
+
+		var row = -1;
+		var curY = 0;
+		while (curY < canvas.height && row < rows.count) {
+			row += 1;
+			if (y < curY) {
+				row -= 1;
+				break;
+			}
+			curY += getRowSize(row);
+		}
+
+		return { x: col, y: row }
+	}
+
+	/**
+	 * Return the screen bounds of the cell at grid index specified by col and row
+	 */
+	function getCellBounds(col: Int, row: Int): Rect2i {
+		var curCol = -1;
+		var x = 0;
+		var w = 0;
+		while(x < canvas.width && curCol < cols.count) {
+			curCol += 1;
+			if (curCol == col) {
+				w = getColSize(curCol);
+				break;
+			}
+			x += getColSize(curCol);
+		}
+
+		var curRow = -1;
+		var y = 0;
+		var h = 0;
+		while(y < canvas.height && curRow < rows.count) {
+			curRow += 1;
+			if (curRow == row) {
+				h = getRowSize(curRow);
+				break;
+			}
+			y += getRowSize(curRow);
+		}
+
+		return new Rect2i(x, y, w, h);
 	}
 
 	// Components
