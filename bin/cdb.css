@@ -839,7 +839,3 @@ body.fullScreenMode .lm_content.fullScreen {
 .sheet .canvas-wrapper {
   background: green;
 }
-.sheet canvas {
-  border: 1px solid #686868;
-  box-sizing: border-box;
-}

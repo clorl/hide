@@ -25,7 +25,7 @@ class SheetHeader extends NativeComponent {
 	var resizeHint: HTMLElement;
 	var isVertical: Bool;
 	var cellSize: Int;
-	var cellCount: Int;
+	public var count: Int;
 
 	// State
 	var resizedElement: HTMLElement;
@@ -39,7 +39,7 @@ class SheetHeader extends NativeComponent {
 		super(parent, null);
 		this.isVertical = isVertical;
 		this.cellSize = isVertical ? size.y : size.x;
-		this.cellCount = count;
+		this.count = count;
 		element.classList.add(isVertical ? "vgroup" : "hgroup");
 		for (i in 0...count) {
 			var elt = el('
@@ -68,7 +68,6 @@ class SheetHeader extends NativeComponent {
 	}
 
 	public function refresh() {
-		onResize(getTotalSize());
 	}
 
 	function onDragInternal(e) {
@@ -116,7 +115,7 @@ class SheetHeader extends NativeComponent {
 			resizeHint.classList.add("hidden");
 		}
 		resizedElement = null;
-		refresh();
+		onResize(getTotalSize());
 	}
 
 
@@ -135,7 +134,7 @@ class SheetHeader extends NativeComponent {
 		return columnName;
 	}
 
-	function getTotalSize(): Int {
+	public function getTotalSize(): Int {
 		var modifiedCount = 0;
 		var sum = 0;
 		for (k => v in cellSizes.keyValueIterator()) {
@@ -145,9 +144,18 @@ class SheetHeader extends NativeComponent {
 
 
 		if (isVertical) {
-			return cellSize * (cellCount - 1 - modifiedCount) + sum;
+			return cellSize * (count - 1 - modifiedCount) + sum;
 		} else {
-			return cellSize * (cellCount - modifiedCount) + sum;
+			return cellSize * (count - modifiedCount) + sum;
+		}
+	}
+
+	public function getSize(index: Int): Int {
+		var found = cellSizes[index];
+		if (found == null) {
+			return cellSize;
+		} else {
+			return found;
 		}
 	}
 }
@@ -165,7 +173,7 @@ class Sheet extends Component {
 	final BORDER_SIZE = 1;
 	final RESIZE_MARGIN = 6;
 
-	public var cellCount = {
+	public var count = {
 		cols: 20,
 		rows: 50
 	};
@@ -177,8 +185,8 @@ class Sheet extends Component {
 	var root: HTMLElement;
 	var canvas : js.html.CanvasElement;
 
-	var colHeadersGroup : SheetHeader;
-	var rowHeadersGroup : SheetHeader;
+	var cols : SheetHeader;
+	var rows : SheetHeader;
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -194,30 +202,27 @@ class Sheet extends Component {
 			x: CELL_SIZE.wsmall,
 			y: CELL_SIZE.h
 		}
-		rowHeadersGroup = new SheetHeader(size, cellCount.rows, true, root);
-		rowHeadersGroup.element.classList.add("grid-a");
-		rowHeadersGroup.onResize = function(newSize) {
-			canvas.height = newSize;
+		rows = new SheetHeader(size, count.rows, true, root);
+		rows.element.classList.add("grid-a");
+		rows.onResize = function(newSize) {
 			refresh();
 		}
-		//rowHeadersGroup.onDrag = onDragAnywhere;
+		//rows.onDrag = onDragAnywhere;
 
 		// Col headers
 		size.x = CELL_SIZE.w;
-		colHeadersGroup = new SheetHeader(size, cellCount.cols, false, root);
-		colHeadersGroup .element.classList.add("grid-b");
-		colHeadersGroup.onResize = function(newSize) {
-			canvas.width = newSize;
+		cols = new SheetHeader(size, count.cols, false, root);
+		cols .element.classList.add("grid-b");
+		cols.onResize = function(newSize) {
 			refresh();
 		}
-		//colHeadersGroup.onDrag = onDragAnywhere;
+		//cols.onDrag = onDragAnywhere;
 
 		// Grid canvas
 		canvas = Browser.document.createCanvasElement();
 		canvas.classList.add("grid-c");
 		root.append(canvas);
-		rowHeadersGroup.refresh();
-		colHeadersGroup.refresh();
+		refresh();
 	}
 
 	/**
@@ -228,16 +233,51 @@ class Sheet extends Component {
 			return;
 		}
 
+		canvas.height = rows.getTotalSize();
+		canvas.width = cols.getTotalSize();
+
 		var ctx = canvas.getContext("2d");
 		if (ctx == null) {
+			trace("No context");
 			return;
+		}
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.lineWidth = 1;
+		ctx.strokeStyle = "#444444";
+		var curX = 0;
+		for (x in 0...cols.count) {
+			curX += getColSize(x);
+			ctx.beginPath();
+			ctx.moveTo(curX, 0);
+			ctx.lineTo(curX, canvas.height);
+			ctx.closePath();
+			ctx.stroke();
+		}
+
+		var curY = 0;
+		for (y in 1...rows.count) {
+			curY += getRowSize(y);
+			ctx.beginPath();
+			ctx.moveTo(0, curY);
+			ctx.lineTo(canvas.width, curY);
+			ctx.closePath();
+			ctx.stroke();
 		}
 	}
 
 	// Helpers
+	function getRowSize(index: Int): Int {
+		return rows.getSize(index);
+	}
 
-	function getCellSize(x: Int, y: Int) {
-		
+	function getColSize(index: Int): Int {
+		return cols.getSize(index);
+	}
+
+	function getCellSize(x: Int, y: Int): Vector2i {
+		var width = cols.getSize(x);
+		var height = rows.getSize(y);
+		return {x: width, y: height};
 	}
 
 	// Components
