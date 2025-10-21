@@ -6,16 +6,118 @@ import js.Browser.document;
 
 typedef Map2D<T, U> = Map<T,Map<T,U>>;
 
-typedef Vector2i = {
-	var x: Int;
-	var y: Int;
+typedef Vector2<T> = {
+	var x: T;
+	var y: T;
 }
+typedef Vector2i = Vector2<Int>;
+typedef Vector2f = Vector2<Float>;
 
 typedef CellData = {
 	var width: Int;
 	var height: Int;
 }
 
+class SheetHeader extends NativeComponent {
+	static final MIN_SIZE = 10;
+
+	var headerCells = new Array<HTMLElement>();
+	var resizeHint: HTMLElement;
+	var isVertical: Bool;
+
+	// State
+	var resizedElement: HTMLElement;
+
+	public function new(size: Vector2i, count: Int, isVertical: Bool, ?parent, ?elt) {
+		super(parent, null);
+		this.isVertical = isVertical;
+		element.classList.add(isVertical ? "vgroup" : "hgroup");
+		for (i in 0...count) {
+			var elt = el('
+					<div class="cell-header ${isVertical ? "row-header" : "col-header"} center" data-index="$i">
+						<span>${isVertical ? Std.string(i) : getColName(i)}</span>
+					</div>', element);
+			elt.style.height = '${size.y}px';
+			elt.style.width = '${size.x}px';
+
+			var sep = el('<div class="${isVertical ? "vresize-handle" : "hresize-handle"}" draggable="true" 
+					data-index="$i"></div>', element);
+			//rowHeadersSeparators.push(sep);
+			if (!isVertical || (isVertical && i > 0)) {
+				sep.addEventListener("drag", onDragInternal);
+			}
+
+			headerCells.push(elt);
+		}
+
+		resizeHint = el('<div class="${isVertical ? "vresize-hint" : "hresize-hint"} hidden"></div>', parent);
+		resizeHint.style.top = "0";
+		resizeHint.style.left = "0";
+
+		if (document != null) {
+			document.body.addEventListener("drop", onDrop);
+		}
+	}
+
+	function onDragInternal(e) {
+		onDrag(e);
+
+		var bounds = parent.getBoundingClientRect();
+		if (isVertical) {
+			var top = e.clientY - bounds.top;
+			resizeHint.style.top = '${top}px';
+		} else {
+			var left = e.clientX - bounds.left;
+			resizeHint.style.left = '${left}px';
+		}
+		if (resizeHint.classList.contains("hidden")) {
+			resizeHint.classList.remove("hidden");
+		}
+		resizedElement = e.target.previousElementSibling;
+	}
+
+	function onDrop(e) {
+		if (resizedElement == null) {
+			return;
+		}
+
+		if (isVertical) {
+			var newHeight = e.clientY - resizedElement.getBoundingClientRect().y;
+			newHeight = newHeight < MIN_SIZE ? MIN_SIZE : newHeight;
+			resizedElement.style.height = '${newHeight}px';
+		} else {
+			var newWidth = e.clientX - resizedElement.getBoundingClientRect().x;
+			newWidth = newWidth < MIN_SIZE ? MIN_SIZE : newWidth;
+			resizedElement.style.width = '${newWidth}px';
+		}
+		if (!resizeHint.classList.contains("hidden")) {
+			resizeHint.classList.add("hidden");
+		}
+		resizedElement = null;
+		// TODO Store internal state
+	}
+
+	public var onDrag = function(e) {
+	}
+
+	function getColName(index: Int): String {
+		var tempIndex = index; 
+		var columnName = "";
+
+		while (tempIndex >= 0) {
+			var remainder = tempIndex % 26;
+			var charCode = 65 + remainder;
+			var character = String.fromCharCode(charCode);
+			columnName = character + columnName;
+			tempIndex = Std.int((tempIndex - remainder) / 26) - 1;
+		}
+
+		return columnName;
+	}
+}
+
+// Sheet is a Component, not a NativeComponent so it can hook to the rest of the code, but every component inside of it should be
+// NativeComponent
 class Sheet extends Component {
 
 	final CELL_SIZE = {
@@ -37,8 +139,8 @@ class Sheet extends Component {
 	var draggedElt: Null<HTMLElement>;
 	var cellData: Map2D<Int,CellData>;
 	// These fields will be stored and used upon reloading the app to avoid costly DOM queries
-	var rowSizes: Map<Int, Int>;
-	var colSizes: Map<Int, Int>;
+	var rowSizes = new Map<Int, Int>();
+	var colSizes = new Map<Int, Int>();
 
 	// UI
 	var root: HTMLElement;
@@ -47,16 +149,14 @@ class Sheet extends Component {
 	var cellResizeHintH: HTMLElement;
 	var cellResizeHintV: HTMLElement;
 
-	var colHeadersGroup : HTMLElement;
-	var colHeaders = new Array();
-	var colHeadersSeparators = new Array();
-
-	var rowHeadersGroup : HTMLElement;
-	var rowHeaders = new Array();
-	var rowHeadersSeparators = new Array();
+	var colHeadersGroup : SheetHeader;
+	var rowHeadersGroup : SheetHeader;
 
 	// Misc
-	var once = true;
+	var curCanvasSize: Vector2<Int> = {
+		x: 0,
+		y: 0
+	};
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -64,7 +164,6 @@ class Sheet extends Component {
 		root = elt.get(0); // "Cast" from jquery object to HTMLElement
 		build();
 		refresh();
-		once = false;
 	}
 
 	public function build() {
@@ -72,47 +171,23 @@ class Sheet extends Component {
 		document.body.addEventListener("drop", onDropAnywhere);
 
 		// Row Headers
-		rowHeadersGroup = el('<div class="vgroup grid-a sticky"></div>', root);
-		for (i in 0...cellCount.rows) {
-			var elt = el('
-					<div class="cell-header row-header center" data-index="$i">
-						<span>$i</span>
-					</div>', rowHeadersGroup);
-			elt.style.height = '${CELL_SIZE.h}px';
-			elt.style.width = '${CELL_SIZE.wsmall}px';
-
-			var sep = el('<div class="vresize-handle" draggable="true" data-drag-event="vresize" data-index="$i"></div>', rowHeadersGroup);
-			rowHeadersSeparators.push(sep);
-			sep.addEventListener("drag", onDragAnywhere);
-
-			if (i > 0) {
-				rowHeaders.push(elt);
-			}
+		var size: Vector2i = {
+			x: CELL_SIZE.wsmall,
+			y: CELL_SIZE.h
 		}
+		rowHeadersGroup = new SheetHeader(size, cellCount.rows, true, root);
+		rowHeadersGroup.element.classList.add("grid-a");
+		//rowHeadersGroup.onDrag = onDragAnywhere;
 
 		// Col headers
-		colHeadersGroup = el('<div class="hgroup grid-b"></div>', root);
-		for (i in 0...cellCount.cols) {
-			var elt = el('
-					<div class="cell-header col-header center" data-index="$i">
-						<span>${getColName(i)}</span>
-					</div>', colHeadersGroup);
-			elt.style.height = '${CELL_SIZE.h}px';
-			elt.style.width = '${CELL_SIZE.w}px';
-
-			var sep = el('<div class="hresize-handle" draggable="true" data-drag-event="hresize" data-index="$i"></div>', colHeadersGroup);
-			sep.addEventListener("drag", onDragAnywhere);
-
-			colHeadersSeparators.push(sep);
-
-			colHeaders.push(elt);
-		}
+		size.x = CELL_SIZE.w;
+		colHeadersGroup = new SheetHeader(size, cellCount.cols, false, root);
+		colHeadersGroup .element.classList.add("grid-b");
+		//colHeadersGroup.onDrag = onDragAnywhere;
 
 		// Grid canvas
 		canvas = Browser.document.createCanvasElement();
 		canvas.classList.add("grid-c");
-		//canvas.width = 200;
-		//canvas.style.backgroundColor = COLORS.fg;
 		root.append(canvas);
 		
 		cellResizeHintH = el('<div class="hresize-hint"></div>', root);
@@ -151,9 +226,11 @@ class Sheet extends Component {
 			return;
 		}
 
-		if (once) {
-			canvas.height = CELL_SIZE.h * (cellCount.rows - 1);
-			canvas.width = CELL_SIZE.w * cellCount.cols + Math.floor(CELL_SIZE.wsmall / 2);
+		var newSize = getCanvasSize();
+		if (newSize.x != curCanvasSize.x && newSize.y != curCanvasSize.y) {
+			curCanvasSize = newSize;
+			canvas.height = newSize.y;
+			canvas.width = newSize.x;
 		}
 
 		var ctx = canvas.getContext("2d");
@@ -163,6 +240,7 @@ class Sheet extends Component {
 	}
 
 	function onDragAnywhere(e) {
+		return;
 		if (draggedElt == null) {
 			draggedElt = e.target;
 		}
@@ -219,19 +297,22 @@ class Sheet extends Component {
 	}
 
 	// Helpers
-	function getColName(index: Int): String {
-		var tempIndex = index; 
-		var columnName = "";
-
-		while (tempIndex >= 0) {
-			var remainder = tempIndex % 26;
-			var charCode = 65 + remainder;
-			var character = String.fromCharCode(charCode);
-			columnName = character + columnName;
-			tempIndex = Std.int((tempIndex - remainder) / 26) - 1;
+	
+	function getCanvasSize(): Vector2i {
+		var baseHeight = CELL_SIZE.h * (cellCount.rows - 1);
+		var baseWidth = CELL_SIZE.w * cellCount.cols + Math.floor(CELL_SIZE.wsmall / 2);
+		for (k in rowSizes.keys()) {
+			baseHeight += rowSizes.get(k);
 		}
 
-		return columnName;
+		for (k in colSizes.keys()) {
+			baseWidth += colSizes.get(k);
+		}
+
+		return {
+			x: baseWidth,
+			y: baseHeight
+		}
 	}
 
 	function getCellSize(x: Int, y: Int) {

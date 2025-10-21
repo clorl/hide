@@ -1,28 +1,23 @@
 package hide.comp;
 import hide.Element;
 import js.Browser.document;
+import hide.Element.el;
 
 class NativeComponent {
-	public static function el(html: String, ?parent: HTMLElement) {
-		var elt = new HTMLElement();
-		elt.outerHTML = html;
-		if (parent != null) {
-			parent.append(elt);
+	public var element(default,null) : HTMLElement;
+	public var parent(default,null) : HTMLElement;
+
+	function new(parent:HTMLElement,elt:HTMLElement) {
+		if( elt == null )
+			elt = el('<div></div>');
+		this.element = elt;
+		if( parent != null ) {
+			parent.append(element);
+			this.parent = parent;
 		}
-		return elt;
 	}
 
-	public var element: HTMLElement;
-	public var parent: HTMLElement;
-	public function new(?parent: HTMLElement, ?el: HTMLElement) {
-		if (el != null) {
-			element = el;
-		} else {
-			element = document.createElement("div");
-		}
-
-		if (parent != null) {
-			parent.append(element);
-		}
+	public function remove() {
+		element.remove();
 	}
 }
