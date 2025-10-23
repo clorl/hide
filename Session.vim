@@ -9,13 +9,8 @@ if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
 endif
 let s:shortmess_save = &shortmess
 set shortmess+=aoO
-badd +12 ~/Documents/hide/hide/view/CdbTable.hx
-badd +1666 ~/Documents/hide/hide/comp/cdb/Editor.hx
-badd +796 ~/Documents/hide/hide/comp/cdb/Table.hx
-badd +828 ~/Documents/hide/bin/cdb.less
-badd +48 ~/Documents/hide/hide/comp/cdb/Sheet.hx
-badd +26 ~/Documents/hide/hrt/impl/ColorSpace.hx
-badd +1470 ~/Documents/hide/hide/comp/cdb/Cell.hx
+badd +306 ~/Documents/hide/hide/comp/cdb/Sheet.hx
+badd +960 ~/Documents/hide/bin/cdb.less
 argglobal
 %argdel
 $argadd .
@@ -44,12 +39,12 @@ setlocal foldnestmax=20
 setlocal foldenable
 silent! normal! zE
 let &fdl = &fdl
-let s:l = 51 - ((15 * winheight(0) + 14) / 28)
+let s:l = 306 - ((13 * winheight(0) + 16) / 32)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 51
-normal! 034|
+keepjumps 306
+normal! 059|
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
   silent exe 'bwipe ' . s:wipebuf

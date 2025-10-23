@@ -948,7 +948,10 @@ body.fullScreenMode {
 		position: absolute;
 		top: 0;
 		left: 0;
-		.handle {
+		border: 2px solid @select-color;
+	}
+	.active-cell, .selection-region {
+		&>.handle {
 			position: absolute;
 			bottom: -6px;
 			right: -6px;
@@ -959,9 +962,12 @@ body.fullScreenMode {
 			border-radius: 1000px;
 			cursor: crosshair;
 		}
-		border: 2px solid @select-color;
-		&.with-bg {
-			background-color: rgba(26, 115, 232, 0.1);
-		}
+	}
+	.selection-region {
+		background-color: rgba(26, 115, 232, 0.1);
+		pointer-events: none;
+		position: absolute;
+		top: 0;
+		left: 0;
 	}
 }

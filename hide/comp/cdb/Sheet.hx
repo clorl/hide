@@ -1,4 +1,5 @@
 package hide.comp.cdb;
+import hide.datatypes.History;
 import hide.Element;
 import hide.Element.el;
 import js.Browser;
@@ -21,18 +22,53 @@ typedef CellData = {
 class Rect2i {
 	public var pos: Vector2<Int>;
 	public var size: Vector2<Int>;
-	public var end(get,null): Vector2<Int>;
+	public var end(get,set): Vector2<Int>;
 	function get_end() {
 		return {
 			x: pos.x + size.x,
 			y: pos.y + size.y
 		};
 	}
+	function set_end(value: Vector2<Int>) {
+		var oldPos = pos;
+		var endTmp = value;
+
+		pos.x = Math.floor(Math.min(oldPos.x, value.x));
+		pos.y = Math.floor(Math.min(oldPos.y, value.y));
+		endTmp.x = Math.floor(Math.max(oldPos.x, value.x));
+		endTmp.y = Math.floor(Math.max(oldPos.y, value.y));
+
+		size.x = Math.floor(endTmp.x - pos.x);
+		size.y = Math.floor(endTmp.y - pos.y);
+		return this.end;
+	}
 
 	public function new(x: Int, y: Int, sizeX: Int, sizeY: Int) {
 		this.pos = {x: x, y: y};
 		this.size = {x: sizeX, y: sizeY };
 	}
+
+	/**
+	 * @param point: Vector2i
+	 * @param strict: Boolean Strict means a point on an edge of the rect will not be considered inside
+	 */
+	public function contains(point: Vector2i, strict = false): Bool {
+		var dx = point.x - pos.x;
+		var dy = point.y - pos.y;
+
+		var isInsideX = strict ? 0 < dx && dx < size.x : 0 <= dx && dx <= size.x;
+		var isInsideY = strict ? 0 < dy && dy < size.y : 0 <= dy && dy <= size.y;
+		return isInsideX && isInsideY;
+	}
+}
+
+enum SheetCommand {
+	Undo;
+	Redo;
+	SetSelection(sel: Array<Rect2i>);
+	AddToSelection(sel: Array<Rect2i>);
+	SelectRegion(start: Rect2i);
+	RemoveFromSelection(sel: Array<Rect2i>);
 }
 
 class SheetHeader extends NativeComponent {
@@ -170,10 +206,13 @@ class SheetHeader extends NativeComponent {
 }
 
 class SelectionIndicator extends NativeComponent {
+	final POOL_SIZE = 10;
+
 	var handle: HTMLElement;
 
 	public var onHandleDrag = function(e) {}
 	public var offset: Vector2i;
+	var selectionRegions = new Array<HTMLElement>();
 
 	public function new(?parent, ?elt) {
 		super(parent, null);
@@ -182,18 +221,70 @@ class SelectionIndicator extends NativeComponent {
 
 		handle = el('<div class="handle"></div>', element);
 		handle.addEventListener("drag", onDragInternal);
+
+		for (i in 0...POOL_SIZE) {
+			var e = el('<div class="hidden selection-region"></div>', parent);
+			selectionRegions.push(e);
+		}
 	}
 
-	public function setSelection(rect: Rect2i, ?isMulti: Bool) {
-		if (element.classList.contains("hidden")) {
-			element.classList.remove("hidden");
+	public function setSelection(sel: Array<Rect2i>) {
+		clearRegions();
+
+		if (sel.length == 1) {
+			setActiveCell(sel[0]);
+			return;
 		}
+
+		for (i in 0...sel.length) {
+			showRegion(sel[i], i == sel.length - 1);
+		}
+	}
+
+	public function setActiveCell(rect: Rect2i) {
+		element.classList.remove("hidden");
 		element.style.top = '${rect.pos.y + offset.y}px';
 		element.style.left = '${rect.pos.x + offset.x}px';
 		element.style.width = '${rect.size.x}px';
 		element.style.height = '${rect.size.y}px';
+		element.append(handle);
+	}
 
-		setMultiSelection(isMulti == null ? false : isMulti);
+	public function showRegion(rect: Rect2i, withHandle = false) {
+		var done = false;
+		var i = 0;
+		while (!done) {
+			if (i < selectionRegions.length) {
+				var elt = selectionRegions[i];
+				if (elt.classList.contains("hidden")) {
+					elt.style.top = '${rect.pos.y + offset.y}px';
+					elt.style.left = '${rect.pos.x + offset.x}px';
+					elt.style.width = '${rect.size.x}px';
+					elt.style.height = '${rect.size.y}px';
+					elt.classList.remove("hidden");
+					done = true;
+					if (withHandle)
+						elt.append(handle);
+				}
+			} else {
+				var elt = el('<div class="selection-region"></div>', parent);
+				selectionRegions.push(elt);
+				elt.style.top = '${rect.pos.y + offset.y}px';
+				elt.style.left = '${rect.pos.x + offset.x}px';
+				elt.style.width = '${rect.size.x}px';
+				elt.style.height = '${rect.size.y}px';
+				done = true;
+				if (withHandle)
+					elt.append(handle);
+			}
+			++i; 
+		}
+	}
+
+	public function clearRegions() {
+		for (r in selectionRegions) {
+			r.classList.add("hidden");
+		}
 	}
 
 	public function setMultiSelection(multi: Bool) {
@@ -208,6 +299,7 @@ class SelectionIndicator extends NativeComponent {
 		onHandleDrag(e);
 	}
 }
+
 
 // Sheet is a Component, not a NativeComponent so it can hook to the rest of the code, but every component inside of it should be a NativeComponent
 class Sheet extends Component {
@@ -237,6 +329,7 @@ class Sheet extends Component {
 
 	// State
 	var selection = new Array<Rect2i>();
+	var cmdHistory = new History<SheetCommand>(100);
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -284,15 +377,13 @@ class Sheet extends Component {
 		canvas.classList.add("grid-c");
 		root.append(canvas);
 
-		canvas.addEventListener("click", function(e) {
-			var bounds = canvas.getBoundingClientRect();
-			var mouseX = Math.floor(e.clientX - bounds.left);
-			var mouseY = Math.floor(e.clientY - bounds.top);
-			var cell = getCellAtScreenPos(mouseX, mouseY);
-			selection = new Array<Rect2i>();
-			selection.push(new Rect2i(cell.x, cell.y, 0, 0));
-			refresh();
-		});
+		// Register event listeners here
+		listen(canvas, "mousedown");
+		listen(canvas, "drag");
+		listen(document.body, "drop");
+		listen(document.body, "keydown");
+		listen(document.body, "keypress");
+		listen(document.body, "keyup");
 
 		refresh();
 	}
@@ -310,15 +401,26 @@ class Sheet extends Component {
 
 		// Selection
 		if (selection.length > 0) {
-			var cell = {x: selection[0].pos.x, y: selection[0].pos.y };
-			selIndicator.setSelection(getCellBounds(cell.x, cell.y), true);
+			var bounds = new Array<Rect2i>();
+			for (elt in selection) {
+				if (elt.size.x > 0 && elt.size.y > 0) {
+					var start = getCellBounds(elt.pos.x, elt.pos.y).pos;
+					var end = getCellBounds(elt.end.x, elt.end.y).end;
+					var b = new Rect2i(0,0,0,0);
+					b.pos = start;
+					b.end = end;
+					bounds.push(b);
+				} else {
+					bounds.push(getCellBounds(elt.pos.x, elt.pos.y));
+				}
+			}
+			selIndicator.setSelection(bounds);
 		} else {
 			selIndicator.element.classList.add("hidden");
 		}
 
 		var ctx = canvas.getContext("2d");
 		if (ctx == null) {
-			trace("No context");
 			return;
 		}
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -345,7 +447,129 @@ class Sheet extends Component {
 		}
 	}
 
+	//https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Events
+	//https://developer.mozilla.org/en-US/docs/Web/API/Event#interfaces_based_on_event
+	//https://developer.mozilla.org/en-US/docs/Web/API/UI_Events
+	function onEvent(name: String, e) {
+		var handled = false;
+
+		switch (name) {
+			case "mousedown":
+				if (!handled && e.target == canvas) {
+					var mouseEvent = cast(e, js.html.MouseEvent);
+					var pos = getRelativeMousePos(canvas, e);
+					var cell = getCellAtScreenPos(pos.x, pos.y);
+
+					if (mouseEvent.button == 0) {
+						if (mouseEvent.ctrlKey) {
+							runCommand(AddToSelection([new Rect2i(cell.x, cell.y, 0, 0)]));
+						} else {
+							runCommand(SetSelection([new Rect2i(cell.x, cell.y, 0, 0)]));
+						}
+						selIndicator.setActiveCell(getCellBounds(cell.x, cell.y));
+					}
+
+					handled = true;
+				}
+			case "mouseup":
+
+			case "keydown":
+				if (!handled) {
+					var keyEvent = cast(e, js.html.KeyboardEvent);
+					switch keyEvent.key {
+						case "Z":
+							if (keyEvent.ctrlKey && keyEvent.shiftKey) {
+								runCommand(Redo);
+								handled = true;
+							} else if (keyEvent.ctrlKey) {
+								runCommand(Undo);
+								handled = true;
+							}
+					}
+				}
+		}
+
+
+		if (!handled) 
+			trace("Unhandled event", name, e);
+	}
+
+
+	function runCommand(cmd: SheetCommand, redo = false) {
+		var shouldRefresh = false;
+		var undoable = true;
+
+		switch (cmd) {
+			case SetSelection(newSel):
+				if (newSel == selection) {
+					return;
+				}
+				selection = newSel;
+				shouldRefresh = true;
+				undoable = false;
+			case AddToSelection(sel):
+				undoable = false;
+				if (selection.length == 1 && sel.length == 1) {
+					if (sel[0] == selection[0]) {
+						return;
+					}
+				}
+				selection = selection.concat(sel);
+				shouldRefresh = true;
+			case Undo: 
+				var otherCmd = cmdHistory.pop();
+				if (otherCmd != null) {
+					undoCommand(otherCmd);
+					shouldRefresh = true;
+				}
+				undoable = false;
+			case Redo:
+				var otherCmd = cmdHistory.unpop();
+				runCommand(otherCmd, true);
+				undoable = false;
+			case _: trace("Unhandled command", cmd);
+		}
+
+
+		if (redo) {
+			cmdHistory.unpop();
+		} else if (undoable) {
+			cmdHistory.push(cmd);
+		}
+		trace(cmdHistory);
+
+		if (shouldRefresh)
+			refresh();
+	}
+
+	// Undo command handling is split into another function
+	function undoCommand(cmd: SheetCommand) {
+		if (cmd == Undo || cmd == Redo) return;
+		switch (cmd) {
+			case SetSelection(newSel):
+				trace("Undo SetSelection");
+			default: {}
+		}
+	}
+
+	function listen(elt: HTMLElement, ev: String) {
+		elt.addEventListener(ev, function(e) { onEvent(ev, e); });
+	}
+
+	// 
 	// Helpers
+	//
+
+	/**
+	 * @return The mouse position relative to the given element, can be negative
+	 */
+	function getRelativeMousePos(elt: HTMLElement, e): Vector2i {
+		var bounds = elt.getBoundingClientRect();
+		var mouseX = Math.floor(e.clientX - bounds.left);
+		var mouseY = Math.floor(e.clientY - bounds.top);
+		return { x: mouseX, y: mouseY };
+	}
+	
 	function getRowSize(index: Int): Int {
 		return rows.getSize(index);
 	}
@@ -419,6 +643,4 @@ class Sheet extends Component {
 
 		return new Rect2i(x, y, w, h);
 	}
-
-	// Components
 }

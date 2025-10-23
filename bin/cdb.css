@@ -847,7 +847,8 @@ body.fullScreenMode .lm_content.fullScreen {
   left: 0;
   border: 2px solid #0b57d0;
 }
-.sheet .active-cell .handle {
+.sheet .active-cell > .handle,
+.sheet .selection-region > .handle {
   position: absolute;
   bottom: -6px;
   right: -6px;
@@ -858,6 +859,10 @@ body.fullScreenMode .lm_content.fullScreen {
   border-radius: 1000px;
   cursor: crosshair;
 }
-.sheet .active-cell.with-bg {
+.sheet .selection-region {
   background-color: rgba(26, 115, 232, 0.1);
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
