@@ -30,16 +30,8 @@ class Rect2i {
 		};
 	}
 	function set_end(value: Vector2<Int>) {
-		var oldPos = pos;
-		var endTmp = value;
-
-		pos.x = Math.floor(Math.min(oldPos.x, value.x));
-		pos.y = Math.floor(Math.min(oldPos.y, value.y));
-		endTmp.x = Math.floor(Math.max(oldPos.x, value.x));
-		endTmp.y = Math.floor(Math.max(oldPos.y, value.y));
-
-		size.x = Math.floor(endTmp.x - pos.x);
-		size.y = Math.floor(endTmp.y - pos.y);
+		size.x = value.x - pos.x;
+		size.y = value.y - pos.y;
 		return this.end;
 	}
 
@@ -60,6 +52,30 @@ class Rect2i {
 		var isInsideY = strict ? 0 < dy && dy < size.y : 0 <= dy && dy <= size.y;
 		return isInsideX && isInsideY;
 	}
+
+	/**
+	 * Returns a copy of itself where size is positive
+	 */
+	public function abs(): Rect2i {
+		// Calculate new position components
+		var newX = Math.min(this.pos.x, this.pos.x + this.size.x);
+		var newY = Math.min(this.pos.y, this.pos.y + this.size.y);
+
+		// Calculate new size components (always positive)
+		var newSizeX = Math.abs(this.size.x);
+		var newSizeY = Math.abs(this.size.y);
+
+		// Return a new Rect2i instance
+		return new Rect2i(
+				Math.floor(newX), 
+				Math.floor(newY), 
+				Math.floor(newSizeX), 
+				Math.floor(newSizeY));
+	}
+
+	public static function fromVec2i(vec: Vector2i): Rect2i {
+		return new Rect2i(vec.x, vec.y, 0, 0);
+	}
 }
 
 enum SheetCommand {
@@ -67,7 +83,6 @@ enum SheetCommand {
 	Redo;
 	SetSelection(sel: Array<Rect2i>);
 	AddToSelection(sel: Array<Rect2i>);
-	SelectRegion(start: Rect2i);
 	RemoveFromSelection(sel: Array<Rect2i>);
 }
 
@@ -287,6 +302,11 @@ class SelectionIndicator extends NativeComponent {
 		}
 	}
 
+	public function hide() {
+		clearRegions();
+		element.classList.add("hidden");
+	}
+
 	public function setMultiSelection(multi: Bool) {
 		if (multi) {
 			element.classList.add("with-bg");
@@ -329,6 +349,8 @@ class Sheet extends Component {
 
 	// State
 	var selection = new Array<Rect2i>();
+	var pendingSelection = new Rect2i(0, 0, 0, 0);
+	var selectionIsPending = false;
 	var cmdHistory = new History<SheetCommand>(100);
 
 	public function new(parent) {
@@ -379,7 +401,8 @@ class Sheet extends Component {
 
 		// Register event listeners here
 		listen(canvas, "mousedown");
-		listen(canvas, "drag");
+		listen(canvas, "mousemove");
+		listen(document.body, "mouseup");
 		listen(document.body, "drop");
 		listen(document.body, "keydown");
 		listen(document.body, "keypress");
@@ -400,9 +423,14 @@ class Sheet extends Component {
 		canvas.width = cols.getTotalSize();
 
 		// Selection
-		if (selection.length > 0) {
+		var selectionCopy = selection.copy();
+		if (selectionIsPending) {
+			selectionCopy.push(pendingSelection.abs());
+		}
+		trace(selectionCopy);
+		if (selectionCopy.length > 0) {
 			var bounds = new Array<Rect2i>();
-			for (elt in selection) {
+			for (elt in selectionCopy) {
 				if (elt.size.x > 0 && elt.size.y > 0) {
 					var start = getCellBounds(elt.pos.x, elt.pos.y).pos;
 					var end = getCellBounds(elt.end.x, elt.end.y).end;
@@ -416,7 +444,7 @@ class Sheet extends Component {
 			}
 			selIndicator.setSelection(bounds);
 		} else {
-			selIndicator.element.classList.add("hidden");
+			selIndicator.hide();
 		}
 
 		var ctx = canvas.getContext("2d");
@@ -451,60 +479,77 @@ class Sheet extends Component {
 	//https://developer.mozilla.org/en-US/docs/Web/API/Event#interfaces_based_on_event
 	//https://developer.mozilla.org/en-US/docs/Web/API/UI_Events
 	function onEvent(name: String, e) {
-		var handled = false;
-
 		switch (name) {
 			case "mousedown":
-				if (!handled && e.target == canvas) {
+				if (e.target == canvas) {
 					var mouseEvent = cast(e, js.html.MouseEvent);
 					var pos = getRelativeMousePos(canvas, e);
-					var cell = getCellAtScreenPos(pos.x, pos.y);
+					var cell = getCellAtPos(pos.x, pos.y);
+
+					if (mouseEvent.button == 0) {
+						selectionIsPending = true;
+						pendingSelection.pos = cell;
+						selIndicator.setActiveCell(getCellBounds(cell.x, cell.y));
+					}
+				}
+			case "mouseup":
+				if (selectionIsPending) {
+					var mouseEvent = cast(e, js.html.MouseEvent);
 
 					if (mouseEvent.button == 0) {
 						if (mouseEvent.ctrlKey) {
-							runCommand(AddToSelection([new Rect2i(cell.x, cell.y, 0, 0)]));
+							runCommand(AddToSelection([pendingSelection]));
 						} else {
-							runCommand(SetSelection([new Rect2i(cell.x, cell.y, 0, 0)]));
+							runCommand(SetSelection([pendingSelection]));
 						}
-						selIndicator.setActiveCell(getCellBounds(cell.x, cell.y));
-					}
+						//selIndicator.setActiveCell(pendingSelection);
 
-					handled = true;
+						pendingSelection.pos = {x: 0, y: 0};
+						pendingSelection.size = {x: 0, y: 0};
+						selectionIsPending = false;
+					}
 				}
-			case "mouseup":
+
+			case "mousemove":
+				var mouseEvent = cast(e, js.html.MouseEvent);
+				var pos = getRelativeMousePos(canvas, e);
+				var cell = getCellAtPos(pos.x, pos.y);
+				if (selectionIsPending) {
+					pendingSelection.end = cell;
+					refresh();
+				}
 
 			case "keydown":
-				if (!handled) {
 					var keyEvent = cast(e, js.html.KeyboardEvent);
 					switch keyEvent.key {
 						case "Z":
 							if (keyEvent.ctrlKey && keyEvent.shiftKey) {
 								runCommand(Redo);
-								handled = true;
 							} else if (keyEvent.ctrlKey) {
 								runCommand(Undo);
-								handled = true;
 							}
 					}
-				}
 		}
 
 
-		if (!handled) 
-			trace("Unhandled event", name, e);
+		//trace("Event", name, e);
 	}
 
 
 	function runCommand(cmd: SheetCommand, redo = false) {
 		var shouldRefresh = false;
 		var undoable = true;
+		trace("Command", cmd);
 
 		switch (cmd) {
 			case SetSelection(newSel):
 				if (newSel == selection) {
 					return;
 				}
-				selection = newSel;
+				selection = new Array<Rect2i>();
+				for (elt in newSel) {
+					selection.push(elt.abs());
+				}
 				shouldRefresh = true;
 				undoable = false;
 			case AddToSelection(sel):
@@ -514,7 +559,11 @@ class Sheet extends Component {
 						return;
 					}
 				}
-				selection = selection.concat(sel);
+				var selCopy = new Array<Rect2i>();
+				for (elt in sel) {
+					selCopy.push(elt.abs());
+				}
+				selection = selection.concat(selCopy);
 				shouldRefresh = true;
 			case Undo: 
 				var otherCmd = cmdHistory.pop();
@@ -536,7 +585,6 @@ class Sheet extends Component {
 		} else if (undoable) {
 			cmdHistory.push(cmd);
 		}
-		trace(cmdHistory);
 
 		if (shouldRefresh)
 			refresh();
@@ -587,7 +635,7 @@ class Sheet extends Component {
 	/**
 	 * @returns Coordinates of the cell in the sheet
 	 */
-	function getCellAtScreenPos(x: Int, y: Int): Vector2i {
+	function getCellAtPos(x: Int, y: Int): Vector2i {
 		var col = -1;
 		var curX = 0;
 		while (curX < canvas.width && col < cols.count) {
