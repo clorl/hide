@@ -285,11 +285,13 @@ class SheetSelection extends NativeComponent {
 
 	public function replace(newSel: Array<Rect2i>) {
 		data = newSel;
+		optimize();
 		refresh();
 	}
 
 	public function add(val: Rect2i) {
 		data.push(val);
+		optimize();
 		showRegion(getSelectionBounds(val));
 	}
 
@@ -331,7 +333,7 @@ class SheetSelection extends NativeComponent {
 		//element.append(handle);
 	}
 
-	function refresh() {
+	public function refresh() {
 		clearRegions();
 		if (data.length == 1) {
 			if (data[0].size.x == 0 && data[0].size.y == 0) {
@@ -342,6 +344,11 @@ class SheetSelection extends NativeComponent {
 			showRegion(getSelectionBounds(elt));
 		}
 	}
+
+	/**
+	 * Performs a tesselation of the selection list so that no cell coordinates overlap
+	 */
+	function optimize() {}
 
 	function getSelectionBounds(rect: Rect2i): Rect2i {
 		if (rect.size.x == 0 && rect.size.y == 0) {
@@ -487,6 +494,8 @@ class Sheet extends Component {
 		if (canvas == null) {
 			return;
 		}
+
+		selection.refresh();
 
 		canvas.height = rows.getTotalSize();
 		canvas.width = cols.getTotalSize();
