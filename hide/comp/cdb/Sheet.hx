@@ -108,6 +108,7 @@ class SheetHeader extends NativeComponent {
 	// Callbacks
 	public var onDrag = function(e) {}
 	public var onResize = function(newSize) {}
+	public var onMouseEvent = function(eName: String, e, isVertical: Bool, index: Int) {}
 
 	public function new(size: Vector2i, count: Int, isVertical: Bool, ?parent, ?elt) {
 		super(parent, null);
@@ -122,6 +123,9 @@ class SheetHeader extends NativeComponent {
 					</div>', element);
 			elt.style.height = '${size.y}px';
 			elt.style.width = '${size.x}px';
+			elt.addEventListener("mousedown", function(e) { onMouseEventInternal("mousedown", e); });
+			elt.addEventListener("mouseup", function(e) { onMouseEventInternal("mouseup", e); });
+			elt.addEventListener("mousemove", function(e) { onMouseEventInternal("mousemove", e); });
 
 			var sep = el('<div class="${isVertical ? "vresize-handle" : "hresize-handle"}" draggable="true"></div>', element);
 			sep.addEventListener("drag", onDragInternal);
@@ -139,6 +143,18 @@ class SheetHeader extends NativeComponent {
 	}
 
 	public function refresh() {
+	}
+
+	function onMouseEventInternal(name: String, e) {
+		try {
+			var mouseEvent = cast(e, js.html.MouseEvent);
+
+			var indexStr = e.target.dataset.index;
+			var index = Std.parseInt(indexStr);
+			if (index == null) { return; }
+
+			onMouseEvent(name, mouseEvent, isVertical, index);
+		} catch (err) {};
 	}
 
 	function onDragInternal(e) {
@@ -300,8 +316,12 @@ class SheetSelection extends NativeComponent {
 		refresh();
 	}
 
-	public function setActiveCell(cell: Vector2i) {
+	public function setActiveCell(cell: Null<Vector2i>) {
 		activeCell = cell;
+		if (activeCell == null) {
+			element.classList.add("hidden");
+			return;
+		}
 		var rect = getCellBounds(activeCell);
 		element.classList.remove("hidden");
 		element.style.top = '${rect.pos.y + offset.y}px';
@@ -424,6 +444,7 @@ class Sheet extends Component {
 		rows.onResize = function(newSize) {
 			refresh();
 		}
+		rows.onMouseEvent = onHeaderEvent;
 		//rows.onDrag = onDragAnywhere;
 
 		// Col headers
@@ -433,6 +454,7 @@ class Sheet extends Component {
 		cols.onResize = function(newSize) {
 			refresh();
 		}
+		cols.onMouseEvent = onHeaderEvent;
 		
 		// Selection indicator
 		selection = new SheetSelection(getCellBounds, root);
@@ -553,6 +575,23 @@ class Sheet extends Component {
 
 
 		//trace("Event", name, e);
+	}
+
+	function onHeaderEvent(name: String, e: js.html.MouseEvent, isVertical: Bool, index: Int) {
+		switch (name) {
+			case "mousedown":
+				if (e.button == 0) {
+					if (!e.ctrlKey) {
+						selection.clear();
+					}
+					selection.setActiveCell(null);
+					if (isVertical) {
+						selection.add(new Rect2i(0, index, cols.count-1, 0));
+					} else {
+						selection.add(new Rect2i(index, 0, 0, rows.count -1));
+					}
+				}
+		}
 	}
 
 
