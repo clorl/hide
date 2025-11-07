@@ -107,7 +107,7 @@ class SheetHeader extends NativeComponent {
 
 	// Callbacks
 	public var onDrag = function(e) {}
-	public var onResize = function(newSize) {}
+	public var onResize = function(newSize, index) {}
 	public var onMouseEvent = function(eName: String, e, isVertical: Bool, index: Int) {}
 
 	public function new(size: Vector2i, count: Int, isVertical: Bool, ?parent, ?elt) {
@@ -201,8 +201,12 @@ class SheetHeader extends NativeComponent {
 		if (!resizeHint.classList.contains("hidden")) {
 			resizeHint.classList.add("hidden");
 		}
+
+		var indexStr = resizedElement.dataset.index;
+		var index = Std.parseInt(indexStr);
+		onResize(getTotalSize(), index != null ? index : -1);
+
 		resizedElement = null;
-		onResize(getTotalSize());
 	}
 
 
@@ -397,6 +401,10 @@ class SheetSelection extends NativeComponent {
 	}
 }
 
+typedef SheetColumn = {
+	var type: cdb.Data.ColumnType;
+	var title: String;
+}
 
 // Sheet is a Component, not a NativeComponent so it can hook to the rest of the code, but every component inside of it should be a NativeComponent
 class Sheet extends Component {
@@ -411,7 +419,7 @@ class Sheet extends Component {
 	final BORDER_SIZE = 1;
 	final RESIZE_MARGIN = 6;
 
-	public var count = {
+	var count = {
 		cols: 20,
 		rows: 50
 	};
@@ -422,10 +430,13 @@ class Sheet extends Component {
 
 	var cols : SheetHeader;
 	var rows : SheetHeader;
+	var lines = new Array<Line>();
 	var selection: SheetSelection;
+	var rowContainer: HTMLElement;
 
 	// State
 	var cmdHistory = new History<SheetCommand>(100);
+	var colTypes = new Array<SheetColumn>();
 
 	public function new(parent) {
 		var elt = new Element('<div class="sheet"></div>');
@@ -448,7 +459,12 @@ class Sheet extends Component {
 		}
 		rows = new SheetHeader(size, count.rows, true, root);
 		rows.element.classList.add("grid-a");
-		rows.onResize = function(newSize) {
+		rows.onResize = function(newSize, index) {
+			if (index < 0) { 
+				trace("index < 0 after resize row");
+			} else if (index < lines.length) {
+				
+			}
 			refresh();
 		}
 		rows.onMouseEvent = onHeaderEvent;
@@ -458,7 +474,7 @@ class Sheet extends Component {
 		size.x = CELL_SIZE.w;
 		cols = new SheetHeader(size, count.cols, false, root);
 		cols .element.classList.add("grid-b");
-		cols.onResize = function(newSize) {
+		cols.onResize = function(newSize, index) {
 			refresh();
 		}
 		cols.onMouseEvent = onHeaderEvent;
@@ -470,9 +486,12 @@ class Sheet extends Component {
 			y: CELL_SIZE.h - 1
 		};
 
+		// Rows
+		rowContainer = el('<div class="grid-c center"></div>', root);
+
 		// Grid canvas
 		canvas = Browser.document.createCanvasElement();
-		canvas.classList.add("grid-c");
+		canvas.classList.add("hidden");
 		root.append(canvas);
 
 		// Register event listeners here
@@ -735,5 +754,13 @@ class Sheet extends Component {
 		}
 
 		return new Rect2i(x, y, w, h);
+	}
+
+	//
+	// Public API
+	//
+	public function addRow(l: Line) {
+		lines.push(l);
+		rowContainer.append(l.element.get(0));
 	}
 }

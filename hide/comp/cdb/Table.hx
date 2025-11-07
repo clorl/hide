@@ -20,6 +20,7 @@ class Table extends Component {
 
 	var separators : Array<Separator>;
 	var previewDrop : Element;
+	var sheetComp: Sheet;
 
 	public var nestedIndex : Int = 0;
 
@@ -44,11 +45,13 @@ class Table extends Component {
 			if( t.sheet.path == sheet.path )
 				trace("Dup CDB table!");
 
+		 sheetComp = new Sheet(editor.element);
+
 		@:privateAccess editor.tables.push(this);
 		root.addClass("cdb-sheet");
 		root.addClass("s_" + sheet.name.split("@").join("_"));
 		if( editor.view != null ) {
-			var cname = parent == null ? null : sheet.parent.sheet.columns[sheet.parent.column].name;
+		var cname = parent == null ? null : sheet.parent.sheet.columns[sheet.parent.column].name;
 			if( parent == null )
 				view = editor.view.get(sheet.name);
 			else if( parent.view.sub != null )
@@ -393,6 +396,7 @@ class Table extends Component {
 			if (parentSep != null && !parentSep.getLinesVisiblity())
 				line.hide();
 			tbody.append(line.element);
+			sheetComp.addRow(line);
 		}
 
 		refreshLinesStatus();

@@ -1662,7 +1662,7 @@ class Editor extends Component {
 
 		///
 		 
-		var sheetComponent = new Sheet(element);
+		//var sheetComponent = new Sheet(element);
 
 		///
 
